@@ -1,18 +1,146 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { sql, relations } from "drizzle-orm";
+import {
+  index,
+  jsonb,
+  pgTable,
+  timestamp,
+  varchar,
+  boolean,
+  integer,
+  pgEnum,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Enums
+export const bloodGroupEnum = pgEnum("blood_group", [
+  "A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"
+]);
+
+export const userRoleEnum = pgEnum("user_role", ["user", "hospital"]);
+
+export const requestStatusEnum = pgEnum("request_status", [
+  "pending", "accepted", "completed", "cancelled"
+]);
+
+export const requestPriorityEnum = pgEnum("request_priority", ["normal", "emergency"]);
+
+// Session storage table for Replit Auth
+export const sessions = pgTable(
+  "sessions",
+  {
+    sid: varchar("sid").primaryKey(),
+    sess: jsonb("sess").notNull(),
+    expire: timestamp("expire").notNull(),
+  },
+  (table) => [index("IDX_session_expire").on(table.expire)],
+);
+
+// Users table - supports both donors/receivers and hospitals
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  email: varchar("email").unique(),
+  firstName: varchar("first_name"),
+  lastName: varchar("last_name"),
+  profileImageUrl: varchar("profile_image_url"),
+  // Blood donation specific fields
+  name: varchar("name").notNull().default(""),
+  age: integer("age"),
+  bloodGroup: bloodGroupEnum("blood_group"),
+  phone: varchar("phone"),
+  location: varchar("location"),
+  canDonate: boolean("can_donate").default(false),
+  availabilityStatus: boolean("availability_status").default(false),
+  donationCount: integer("donation_count").default(0),
+  lastDonationDate: timestamp("last_donation_date"),
+  createdByHospital: boolean("created_by_hospital").default(false),
+  role: userRoleEnum("role").default("user"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+// Blood Requests table
+export const bloodRequests = pgTable("blood_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  requestedById: varchar("requested_by_id").notNull().references(() => users.id),
+  bloodGroup: bloodGroupEnum("blood_group").notNull(),
+  location: varchar("location").notNull(),
+  status: requestStatusEnum("status").default("pending"),
+  matchedDonorId: varchar("matched_donor_id").references(() => users.id),
+  priority: requestPriorityEnum("priority").default("normal"),
+  unitsNeeded: integer("units_needed").default(1),
+  notes: varchar("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
+// Hospital Blood Stock table
+export const hospitalBloodStock = pgTable("hospital_blood_stock", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  hospitalId: varchar("hospital_id").notNull().references(() => users.id),
+  bloodGroup: bloodGroupEnum("blood_group").notNull(),
+  unitsAvailable: integer("units_available").default(0),
+  lastUpdated: timestamp("last_updated").defaultNow(),
+});
+
+// Relations
+export const usersRelations = relations(users, ({ many }) => ({
+  requestsMade: many(bloodRequests, { relationName: "requester" }),
+  donationsMatched: many(bloodRequests, { relationName: "donor" }),
+  bloodStock: many(hospitalBloodStock),
+}));
+
+export const bloodRequestsRelations = relations(bloodRequests, ({ one }) => ({
+  requester: one(users, {
+    fields: [bloodRequests.requestedById],
+    references: [users.id],
+    relationName: "requester",
+  }),
+  matchedDonor: one(users, {
+    fields: [bloodRequests.matchedDonorId],
+    references: [users.id],
+    relationName: "donor",
+  }),
+}));
+
+export const hospitalBloodStockRelations = relations(hospitalBloodStock, ({ one }) => ({
+  hospital: one(users, {
+    fields: [hospitalBloodStock.hospitalId],
+    references: [users.id],
+  }),
+}));
+
+// Zod Schemas
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertBloodRequestSchema = createInsertSchema(bloodRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertHospitalBloodStockSchema = createInsertSchema(hospitalBloodStock).omit({
+  id: true,
+  lastUpdated: true,
+});
+
+// Types
+export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+
+export type BloodRequest = typeof bloodRequests.$inferSelect;
+export type InsertBloodRequest = z.infer<typeof insertBloodRequestSchema>;
+
+export type HospitalBloodStock = typeof hospitalBloodStock.$inferSelect;
+export type InsertHospitalBloodStock = z.infer<typeof insertHospitalBloodStockSchema>;
+
+// Blood group type for easy reference
+export type BloodGroup = "A+" | "A-" | "B+" | "B-" | "O+" | "O-" | "AB+" | "AB-";
+export type RequestStatus = "pending" | "accepted" | "completed" | "cancelled";
+export type RequestPriority = "normal" | "emergency";
+export type UserRole = "user" | "hospital";
