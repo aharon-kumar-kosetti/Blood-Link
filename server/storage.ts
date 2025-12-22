@@ -12,7 +12,7 @@ import {
   type InsertAnnouncement,
   announcements,
 } from "@shared/schema";
-import { db } from "./db";
+import { db } from "./db.js";
 import { eq, and, or, desc, sql, getTableColumns } from "drizzle-orm";
 
 export interface IStorage {

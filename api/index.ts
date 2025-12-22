@@ -1,4 +1,4 @@
-import { setupApp } from "../server/index";
+import { setupApp } from "../server/index.js";
 
 let appPromise: Promise<any> | null = null;
 
