@@ -8,8 +8,8 @@ import connectPg from "connect-pg-simple";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { storage } from "./storage";
-import { insertUserSchema, type User } from "../shared/schema";
+import { storage } from "./storage.js";
+import { insertUserSchema, type User } from "../shared/schema.js";
 import { put } from "@vercel/blob";
 
 // Configure multer for PDF uploads

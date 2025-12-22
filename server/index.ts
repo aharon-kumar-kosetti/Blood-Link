@@ -2,8 +2,8 @@ import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 // Force restart final check 2
 console.log("Server restarting... Remove user feature added.");
-import { registerRoutes } from "./routes";
-import { serveStatic } from "./static";
+import { registerRoutes } from "./routes.js";
+import { serveStatic } from "./static.js";
 import { createServer } from "http";
 
 const app = express();

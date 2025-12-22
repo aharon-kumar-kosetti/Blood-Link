@@ -11,8 +11,8 @@ import {
   type Announcement,
   type InsertAnnouncement,
   announcements,
-} from "../shared/schema";
-import { db } from "./db";
+} from "../shared/schema.js";
+import { db } from "./db.js";
 import { eq, and, or, desc, sql, getTableColumns } from "drizzle-orm";
 
 export interface IStorage {
