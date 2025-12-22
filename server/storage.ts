@@ -11,7 +11,7 @@ import {
   type Announcement,
   type InsertAnnouncement,
   announcements,
-} from "@shared/schema";
+} from "../shared/schema";
 import { db } from "./db";
 import { eq, and, or, desc, sql, getTableColumns } from "drizzle-orm";
 

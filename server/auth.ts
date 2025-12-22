@@ -9,7 +9,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { storage } from "./storage";
-import { insertUserSchema, type User } from "@shared/schema";
+import { insertUserSchema, type User } from "../shared/schema";
 import { put } from "@vercel/blob";
 
 // Configure multer for PDF uploads
