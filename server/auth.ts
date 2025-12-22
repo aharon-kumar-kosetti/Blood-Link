@@ -14,7 +14,7 @@ import { put } from "@vercel/blob";
 
 // Configure multer for PDF uploads
 const uploadDir = "uploads";
-if (!fs.existsSync(uploadDir)) {
+if (!process.env.VERCEL && !fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir);
 }
 
@@ -68,6 +68,9 @@ async function uploadFile(file: Express.Multer.File): Promise<string> {
         const blob = await put(`uploads/${Date.now()}-${file.originalname}`, file.buffer, { access: 'public' });
         return blob.url;
     } else {
+        if (process.env.VERCEL) {
+            throw new Error("Local file uploads are not supported on Vercel. Please configure BLOB_READ_WRITE_TOKEN.");
+        }
         const filename = `${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`;
         const filePath = path.join(uploadDir, filename);
         if (!fs.existsSync(uploadDir)) {
