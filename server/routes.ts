@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { type Server } from "http";
-import { storage } from "./storage.js";
-import { setupAuth, isAuthenticated } from "./auth.js";
+import { storage } from "./storage";
+import { setupAuth, isAuthenticated } from "./auth";
 import { type BloodGroup } from "@shared/schema";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
