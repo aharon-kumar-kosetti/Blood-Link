@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BloodGroupBadge } from "./BloodGroupBadge";
 import { StatusBadge, PriorityBadge } from "./StatusBadge";
-import { MapPin, Clock, User, Check, X, Droplets } from "lucide-react";
+import { MapPin, Clock, User, Check, X, Droplets, Trash2 } from "lucide-react";
 import type { BloodRequest, User as UserType } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 
@@ -15,7 +15,9 @@ interface RequestCardProps {
   onAccept?: (requestId: string) => void;
   onReject?: (requestId: string) => void;
   onCancel?: (requestId: string) => void;
+
   onComplete?: (requestId: string) => void;
+  onDelete?: (requestId: string) => void;
   variant?: "incoming" | "outgoing" | "hospital";
 }
 
@@ -25,26 +27,24 @@ export function RequestCard({
   onAccept,
   onReject,
   onCancel,
+
   onComplete,
+  onDelete,
   variant = "outgoing",
 }: RequestCardProps) {
   const isOwnRequest = request.requestedById === currentUserId;
   const isMatchedDonor = request.matchedDonorId === currentUserId;
-  const requesterName = request.requester?.name || 
-    `${request.requester?.firstName || ""} ${request.requester?.lastName || ""}`.trim() || 
-    "Unknown Requester";
-  const donorName = request.matchedDonor?.name || 
-    `${request.matchedDonor?.firstName || ""} ${request.matchedDonor?.lastName || ""}`.trim();
+  const requesterName = request.requester?.name || "Unknown Requester";
+  const donorName = request.matchedDonor?.name || "";
 
-  const timeAgo = request.createdAt 
+  const timeAgo = request.createdAt
     ? formatDistanceToNow(new Date(request.createdAt), { addSuffix: true })
     : "";
 
   return (
-    <Card 
-      className={`hover-elevate transition-all duration-200 ${
-        request.priority === "emergency" ? "border-red-500/50 dark:border-red-500/30" : ""
-      }`}
+    <Card
+      className={`hover-elevate transition-all duration-200 ${request.priority === "emergency" ? "border-red-500/50 dark:border-red-500/30" : ""
+        }`}
       data-testid={`card-request-${request.id}`}
     >
       <CardHeader className="pb-2">
@@ -103,6 +103,7 @@ export function RequestCard({
                 size="sm"
                 onClick={() => onAccept(request.id)}
                 data-testid={`button-accept-request-${request.id}`}
+                className="shadow-[0_0_15px_rgba(239,68,68,0.3)] hover:shadow-[0_0_20px_rgba(239,68,68,0.5)] transition-shadow"
               >
                 <Check className="h-4 w-4 mr-2" />
                 Accept
@@ -111,6 +112,7 @@ export function RequestCard({
                 size="sm"
                 variant="outline"
                 onClick={() => onReject(request.id)}
+                className="border-primary text-primary hover:bg-primary/10 hover:text-primary"
                 data-testid={`button-reject-request-${request.id}`}
               >
                 <X className="h-4 w-4 mr-2" />
@@ -136,6 +138,7 @@ export function RequestCard({
               size="sm"
               onClick={() => onComplete(request.id)}
               data-testid={`button-complete-request-${request.id}`}
+              className="shadow-[0_0_15px_rgba(239,68,68,0.3)] hover:shadow-[0_0_20px_rgba(239,68,68,0.5)] transition-shadow"
             >
               <Check className="h-4 w-4 mr-2" />
               Mark Completed

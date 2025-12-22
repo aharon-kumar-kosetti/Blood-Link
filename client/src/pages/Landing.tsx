@@ -1,11 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { 
-  Droplets, 
-  Users, 
-  Heart, 
-  Clock, 
+import {
+  Droplets,
+  Users,
+  Heart,
+  Clock,
   LogIn,
   UserPlus,
   Search,
@@ -59,7 +59,7 @@ export default function Landing() {
             <div className="flex items-center gap-2">
               <ThemeToggle />
               <Button asChild data-testid="button-login">
-                <a href="/api/login">
+                <a href="/auth">
                   <LogIn className="h-4 w-4 mr-2" />
                   Sign In
                 </a>
@@ -71,12 +71,12 @@ export default function Landing() {
 
       <main>
         <section className="relative min-h-[80vh] flex items-center justify-center overflow-hidden pt-16">
-          <div 
+          <div
             className="absolute inset-0 bg-cover bg-center"
             style={{ backgroundImage: `url(${heroImage})` }}
           />
           <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/60 to-black/80" />
-          
+
           <div className="relative z-10 container mx-auto px-4 py-20 text-center">
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
               Every Drop Counts.
@@ -84,19 +84,19 @@ export default function Landing() {
               <span className="text-primary-foreground/90">Be a Hero Today.</span>
             </h1>
             <p className="text-lg md:text-xl text-white/80 max-w-2xl mx-auto mb-8">
-              Connect with blood donors and receivers in real-time. 
+              Connect with blood donors and receivers in real-time.
               Our platform makes it easy to save lives with just a few clicks.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button size="lg" asChild className="text-lg px-8" data-testid="button-get-started">
-                <a href="/api/login">
+                <a href="/auth">
                   Get Started
                   <ArrowRight className="h-5 w-5 ml-2" />
                 </a>
               </Button>
-              <Button 
-                size="lg" 
-                variant="outline" 
+              <Button
+                size="lg"
+                variant="outline"
                 className="text-lg px-8 bg-white/10 backdrop-blur-sm border-white/30 text-white"
                 data-testid="button-learn-more"
               >
@@ -278,7 +278,7 @@ export default function Landing() {
             <div>
               <h4 className="font-semibold mb-4">Get Started</h4>
               <Button asChild className="w-full" data-testid="button-footer-signup">
-                <a href="/api/login">
+                <a href="/auth">
                   Join as Donor
                 </a>
               </Button>

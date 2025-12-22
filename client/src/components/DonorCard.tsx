@@ -13,7 +13,7 @@ interface DonorCardProps {
 }
 
 export function DonorCard({ donor, onRequestBlood, showActions = true }: DonorCardProps) {
-  const displayName = donor.name || `${donor.firstName || ""} ${donor.lastName || ""}`.trim() || "Anonymous Donor";
+  const displayName = donor.name || "Anonymous Donor";
   const initials = displayName
     .split(" ")
     .map((n) => n[0])
@@ -22,7 +22,7 @@ export function DonorCard({ donor, onRequestBlood, showActions = true }: DonorCa
     .slice(0, 2);
 
   return (
-    <Card 
+    <Card
       className="hover-elevate transition-all duration-200"
       data-testid={`card-donor-${donor.id}`}
     >
@@ -41,11 +41,7 @@ export function DonorCard({ donor, onRequestBlood, showActions = true }: DonorCa
                 <h3 className="font-semibold text-lg truncate" data-testid={`text-donor-name-${donor.id}`}>
                   {displayName}
                 </h3>
-                {donor.age && (
-                  <p className="text-sm text-muted-foreground">
-                    {donor.age} years old
-                  </p>
-                )}
+
               </div>
               {donor.bloodGroup && (
                 <BloodGroupBadge bloodGroup={donor.bloodGroup} size="lg" />
@@ -73,12 +69,13 @@ export function DonorCard({ donor, onRequestBlood, showActions = true }: DonorCa
 
             <div className="mt-4 flex items-center justify-between gap-2 flex-wrap">
               <AvailabilityBadge available={donor.availabilityStatus || false} />
-              
+
               {showActions && donor.availabilityStatus && onRequestBlood && (
                 <Button
                   size="sm"
                   onClick={() => onRequestBlood(donor.id)}
                   data-testid={`button-request-blood-${donor.id}`}
+                  className="shadow-[0_0_15px_rgba(239,68,68,0.4)] hover:shadow-[0_0_20px_rgba(239,68,68,0.5)] transition-shadow text-white"
                 >
                   <Send className="h-4 w-4 mr-2" />
                   Request Blood

@@ -17,11 +17,10 @@ import type { BloodGroup } from "@shared/schema";
 const BLOOD_GROUPS: BloodGroup[] = ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"];
 
 export default function CompleteProfile() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, logoutMutation } = useAuth();
   const { toast } = useToast();
   const [formData, setFormData] = useState({
     name: "",
-    age: 18,
     bloodGroup: "" as BloodGroup | "",
     phone: "",
     location: "",
@@ -31,8 +30,7 @@ export default function CompleteProfile() {
   useEffect(() => {
     if (user) {
       setFormData({
-        name: user.name || `${user.firstName || ""} ${user.lastName || ""}`.trim() || "",
-        age: user.age || 18,
+        name: user.name || "",
         bloodGroup: user.bloodGroup || "",
         phone: user.phone || "",
         location: user.location || "",
@@ -46,25 +44,20 @@ export default function CompleteProfile() {
       await apiRequest("PATCH", "/api/users/me", formData);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api", "auth", "user"] });
       toast({ title: "Profile Updated", description: "Your profile is now complete!" });
       window.location.href = "/";
     },
     onError: (error) => {
       if (isUnauthorizedError(error)) {
         toast({ title: "Unauthorized", description: "Please log in again.", variant: "destructive" });
-        setTimeout(() => { window.location.href = "/api/login"; }, 500);
         return;
       }
       toast({ title: "Error", description: "Failed to update profile.", variant: "destructive" });
     },
   });
 
-  useEffect(() => {
-    if (!isLoading && !user) {
-      window.location.href = "/api/login";
-    }
-  }, [user, isLoading]);
+  // No longer needed as Router handles redirection
 
   if (isLoading) {
     return (
@@ -79,7 +72,7 @@ export default function CompleteProfile() {
 
   if (!user) return null;
 
-  const isFormValid = formData.name && formData.bloodGroup && formData.location && formData.age >= 18;
+  const isFormValid = formData.name && formData.bloodGroup && formData.location;
 
   return (
     <div className="min-h-screen bg-background">
@@ -90,7 +83,17 @@ export default function CompleteProfile() {
               <Droplets className="h-8 w-8 text-primary" />
               <span className="text-xl font-bold">BloodLink</span>
             </div>
-            <ThemeToggle />
+            <div className="flex items-center gap-4">
+              <ThemeToggle />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => logoutMutation.mutate()}
+                disabled={logoutMutation.isPending}
+              >
+                Logout
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -119,35 +122,21 @@ export default function CompleteProfile() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="profile-age">Age *</Label>
-                  <Input
-                    id="profile-age"
-                    type="number"
-                    min={18}
-                    max={65}
-                    value={formData.age}
-                    onChange={(e) => setFormData({ ...formData, age: parseInt(e.target.value) || 18 })}
-                    data-testid="input-profile-age"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="profile-blood-group">Blood Group *</Label>
-                  <Select
-                    value={formData.bloodGroup}
-                    onValueChange={(value) => setFormData({ ...formData, bloodGroup: value as BloodGroup })}
-                  >
-                    <SelectTrigger id="profile-blood-group" data-testid="select-profile-blood-group">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {BLOOD_GROUPS.map((group) => (
-                        <SelectItem key={group} value={group}>{group}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="profile-blood-group">Blood Group *</Label>
+                <Select
+                  value={formData.bloodGroup}
+                  onValueChange={(value) => setFormData({ ...formData, bloodGroup: value as BloodGroup })}
+                >
+                  <SelectTrigger id="profile-blood-group" data-testid="select-profile-blood-group">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BLOOD_GROUPS.map((group) => (
+                      <SelectItem key={group} value={group}>{group}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -156,7 +145,7 @@ export default function CompleteProfile() {
                   id="profile-phone"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="+1 234 567 8900"
+                  placeholder="+91 9000000000"
                   data-testid="input-profile-phone"
                 />
               </div>
@@ -167,7 +156,7 @@ export default function CompleteProfile() {
                   id="profile-location"
                   value={formData.location}
                   onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="e.g., New York, NY"
+                  placeholder="Enter your location"
                   data-testid="input-profile-location"
                 />
               </div>

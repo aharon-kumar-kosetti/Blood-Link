@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { BloodGroupBadge } from "@/components/BloodGroupBadge";
@@ -19,10 +21,10 @@ import { BloodInventoryCard } from "@/components/BloodInventoryCard";
 import { StatsCard } from "@/components/StatsCard";
 import { RequestCard } from "@/components/RequestCard";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  SidebarProvider, 
-  Sidebar, 
-  SidebarContent, 
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarContent,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
@@ -32,10 +34,10 @@ import {
   SidebarGroupLabel,
   SidebarGroupContent
 } from "@/components/ui/sidebar";
-import { 
-  Droplets, 
-  LogOut, 
-  Users, 
+import {
+  Droplets,
+  LogOut,
+  Users,
   Warehouse,
   AlertTriangle,
   Plus,
@@ -44,28 +46,42 @@ import {
   Activity,
   ClipboardList,
   Heart,
-  TrendingUp
+  TrendingUp,
+  CheckCircle,
+  XCircle,
+  Eye,
+  UserCircle,
+  Trash2,
+  Megaphone
 } from "lucide-react";
 import type { User, BloodRequest, HospitalBloodStock, BloodGroup } from "@shared/schema";
 
 const BLOOD_GROUPS: BloodGroup[] = ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"];
 
 function HospitalHeader() {
+  const { user, logoutMutation } = useAuth();
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b">
       <div className="flex items-center justify-between gap-4 px-4 py-3">
         <div className="flex items-center gap-2">
           <SidebarTrigger data-testid="button-sidebar-toggle" />
           <Droplets className="h-6 w-6 text-primary" />
-          <span className="text-lg font-bold hidden sm:inline">Hospital Dashboard</span>
+          <span className="text-lg font-bold hidden sm:inline">
+            {user?.name ? `${user.name} Dashboard` : "Hospital Dashboard"}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <Button variant="ghost" asChild data-testid="button-hospital-logout">
-            <a href="/api/logout">
-              <LogOut className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Logout</span>
-            </a>
+          <Button
+            variant="ghost"
+            onClick={() => logoutMutation.mutate()}
+            disabled={logoutMutation.isPending}
+            data-testid="button-hospital-logout"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            <span className="hidden sm:inline">
+              {logoutMutation.isPending ? "Logging out..." : "Logout"}
+            </span>
           </Button>
         </div>
       </div>
@@ -80,13 +96,13 @@ function DashboardOverview() {
     pendingRequests: number;
     completedDonations: number;
   }>({
-    queryKey: ["/api/hospital/stats"],
+    queryKey: ["/api", "hospital", "stats"],
   });
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Dashboard Overview</h1>
-      
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           title="Total Donors"
@@ -125,16 +141,17 @@ function UserManagement() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newUser, setNewUser] = useState({
     name: "",
-    age: 18,
     bloodGroup: "" as BloodGroup | "",
     phone: "",
     location: "",
     canDonate: true,
     email: "",
+    username: "",
+    password: "",
   });
 
   const { data: users, isLoading } = useQuery<User[]>({
-    queryKey: ["/api/hospital/users"],
+    queryKey: ["/api", "hospital", "users"],
   });
 
   const createUserMutation = useMutation({
@@ -142,19 +159,65 @@ function UserManagement() {
       await apiRequest("POST", "/api/hospital/users", newUser);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/hospital/users"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/hospital/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api", "hospital", "users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api", "hospital", "stats"] });
       setIsCreateDialogOpen(false);
-      setNewUser({ name: "", age: 18, bloodGroup: "", phone: "", location: "", canDonate: true, email: "" });
+      setNewUser({ name: "", bloodGroup: "", phone: "", location: "", canDonate: true, email: "", username: "", password: "" });
       toast({ title: "Success", description: "User created successfully." });
     },
     onError: (error) => {
       if (isUnauthorizedError(error)) {
         toast({ title: "Unauthorized", description: "Please log in again.", variant: "destructive" });
-        setTimeout(() => { window.location.href = "/api/login"; }, 500);
         return;
       }
       toast({ title: "Error", description: "Failed to create user.", variant: "destructive" });
+    },
+  });
+
+  const verifyUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await apiRequest("PATCH", `/api/hospital/users/${userId}/verify`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api", "hospital", "users"] });
+      toast({ title: "Verified", description: "User has been verified successfully." });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: "Failed to verify user.", variant: "destructive" });
+    },
+  });
+
+  const updateUserStatusMutation = useMutation({
+    mutationFn: async ({ userId, data }: { userId: string, data: { canDonate?: boolean, availabilityStatus?: boolean } }) => {
+      await apiRequest("PATCH", `/api/hospital/users/${userId}/status`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api", "hospital", "users"] });
+      toast({
+        title: "Status Updated",
+        description: "User donation status has been updated.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Update Failed",
+        description: "Failed to update user status.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await apiRequest("DELETE", `/api/hospital/users/${userId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api", "hospital", "users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api", "hospital", "stats"] });
+      toast({ title: "User Removed", description: "User has been permanently deleted." });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: "Failed to delete user.", variant: "destructive" });
     },
   });
 
@@ -162,7 +225,7 @@ function UserManagement() {
     if (user.role === "hospital") return false;
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      const name = (user.name || `${user.firstName} ${user.lastName}`).toLowerCase();
+      const name = (user.name || "").toLowerCase();
       if (!name.includes(query) && !user.location?.toLowerCase().includes(query)) return false;
     }
     if (bloodGroupFilter !== "all" && user.bloodGroup !== bloodGroupFilter) return false;
@@ -193,40 +256,49 @@ function UserManagement() {
                   id="user-name"
                   value={newUser.name}
                   onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                  placeholder="John Doe"
+                  placeholder="Enter full name"
                   data-testid="input-new-user-name"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="user-age">Age *</Label>
-                  <Input
-                    id="user-age"
-                    type="number"
-                    min={18}
-                    max={65}
-                    value={newUser.age}
-                    onChange={(e) => setNewUser({ ...newUser, age: parseInt(e.target.value) || 18 })}
-                    data-testid="input-new-user-age"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="user-blood-group">Blood Group *</Label>
-                  <Select
-                    value={newUser.bloodGroup}
-                    onValueChange={(value) => setNewUser({ ...newUser, bloodGroup: value as BloodGroup })}
-                  >
-                    <SelectTrigger id="user-blood-group" data-testid="select-new-user-blood-group">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {BLOOD_GROUPS.map((group) => (
-                        <SelectItem key={group} value={group}>{group}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="user-username">Username *</Label>
+                <Input
+                  id="user-username"
+                  value={newUser.username}
+                  onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                  placeholder="Enter username"
+                  data-testid="input-new-user-username"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="user-password">Password *</Label>
+                <Input
+                  id="user-password"
+                  type="password"
+                  value={newUser.password}
+                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                  placeholder="Enter password"
+                  data-testid="input-new-user-password"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="user-blood-group">Blood Group *</Label>
+                <Select
+                  value={newUser.bloodGroup}
+                  onValueChange={(value) => setNewUser({ ...newUser, bloodGroup: value as BloodGroup })}
+                >
+                  <SelectTrigger id="user-blood-group" data-testid="select-new-user-blood-group">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BLOOD_GROUPS.map((group) => (
+                      <SelectItem key={group} value={group}>{group}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -235,7 +307,7 @@ function UserManagement() {
                   id="user-phone"
                   value={newUser.phone}
                   onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
-                  placeholder="+1 234 567 8900"
+                  placeholder="+91 9000000000"
                   data-testid="input-new-user-phone"
                 />
               </div>
@@ -246,7 +318,7 @@ function UserManagement() {
                   id="user-location"
                   value={newUser.location}
                   onChange={(e) => setNewUser({ ...newUser, location: e.target.value })}
-                  placeholder="City, State"
+                  placeholder="Enter your location"
                   data-testid="input-new-user-location"
                 />
               </div>
@@ -258,7 +330,7 @@ function UserManagement() {
                   type="email"
                   value={newUser.email}
                   onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  placeholder="john@example.com"
+                  placeholder="Enter Email"
                   data-testid="input-new-user-email"
                 />
               </div>
@@ -269,7 +341,7 @@ function UserManagement() {
               </Button>
               <Button
                 onClick={() => createUserMutation.mutate()}
-                disabled={!newUser.name || !newUser.bloodGroup || !newUser.location || createUserMutation.isPending}
+                disabled={!newUser.name || !newUser.bloodGroup || !newUser.location || !newUser.username || !newUser.password || createUserMutation.isPending}
                 data-testid="button-submit-new-user"
               >
                 {createUserMutation.isPending ? "Creating..." : "Create User"}
@@ -356,19 +428,33 @@ function UserManagement() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
+
                     <TableHead>Blood Group</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Phone</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Available</TableHead>
+                    <TableHead>Can Donate</TableHead>
+                    <TableHead>Verified</TableHead>
+                    <TableHead>ID Proof</TableHead>
                     <TableHead>Donations</TableHead>
+                    <TableHead>Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredUsers.map((user) => (
                     <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
                       <TableCell className="font-medium">
-                        {user.name || `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Unknown"}
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={user.profileImageUrl || undefined} alt={user.name} />
+                            <AvatarFallback>
+                              {(user.name || "U").substring(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span>{user.name || "Unknown"}</span>
+                        </div>
                       </TableCell>
+
                       <TableCell>
                         {user.bloodGroup && <BloodGroupBadge bloodGroup={user.bloodGroup} size="sm" />}
                       </TableCell>
@@ -379,10 +465,89 @@ function UserManagement() {
                         {user.phone || "-"}
                       </TableCell>
                       <TableCell>
-                        <AvailabilityBadge available={user.availabilityStatus || false} />
+                        <Switch
+                          checked={user.availabilityStatus || false}
+                          onCheckedChange={(checked) =>
+                            updateUserStatusMutation.mutate({
+                              userId: user.id,
+                              data: { availabilityStatus: checked }
+                            })
+                          }
+                          disabled={updateUserStatusMutation.isPending}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={user.canDonate || false}
+                          onCheckedChange={(checked) =>
+                            updateUserStatusMutation.mutate({
+                              userId: user.id,
+                              data: { canDonate: checked }
+                            })
+                          }
+                          disabled={updateUserStatusMutation.isPending}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {user.isVerified ? (
+                          <div className="flex items-center gap-1 text-green-600">
+                            <CheckCircle className="h-4 w-4" />
+                            <span className="text-xs font-medium">Verified</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 text-amber-600">
+                            <XCircle className="h-4 w-4" />
+                            <span className="text-xs font-medium">Pending</span>
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {user.idDocumentUrl ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 gap-1"
+                            onClick={() => window.open(user.idDocumentUrl!, "_blank")}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            <span>View</span>
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground text-center block">No ID</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-center">
                         {user.donationCount || 0}
+                      </TableCell>
+                      <TableCell>
+                        {!user.isVerified && (
+                          <div className="flex gap-2 justify-center">
+                            {user.idDocumentUrl && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 border-green-200 hover:border-green-300 hover:bg-green-50 text-green-700"
+                                onClick={() => verifyUserMutation.mutate(user.id)}
+                                disabled={verifyUserMutation.isPending}
+                              >
+                                Verify
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="h-8"
+                              onClick={() => {
+                                if (confirm("Are you sure you want to permanently delete this user?")) {
+                                  deleteUserMutation.mutate(user.id);
+                                }
+                              }}
+                              disabled={deleteUserMutation.isPending}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -401,7 +566,7 @@ function BloodInventory() {
   const { toast } = useToast();
 
   const { data: inventory, isLoading } = useQuery<HospitalBloodStock[]>({
-    queryKey: ["/api/hospital/inventory"],
+    queryKey: ["/api", "hospital", "inventory"],
   });
 
   const updateInventoryMutation = useMutation({
@@ -409,7 +574,7 @@ function BloodInventory() {
       await apiRequest("PATCH", "/api/hospital/inventory", { bloodGroup, delta });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/hospital/inventory"] });
+      queryClient.invalidateQueries({ queryKey: ["/api", "hospital", "inventory"] });
     },
     onError: (error) => {
       if (isUnauthorizedError(error)) {
@@ -520,7 +685,7 @@ function RequestManagement() {
   });
 
   const { data: allRequests, isLoading } = useQuery<BloodRequest[]>({
-    queryKey: ["/api/hospital/requests"],
+    queryKey: ["/api", "hospital", "requests"],
   });
 
   const createRequestMutation = useMutation({
@@ -528,7 +693,7 @@ function RequestManagement() {
       await apiRequest("POST", "/api/requests", newRequest);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/hospital/requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api", "hospital", "requests"] });
       setIsCreateDialogOpen(false);
       setNewRequest({ bloodGroup: "", location: "", priority: "emergency", unitsNeeded: 1, notes: "" });
       toast({ title: "Emergency Request Created", description: "Matching donors will be notified." });
@@ -547,8 +712,8 @@ function RequestManagement() {
       await apiRequest("PATCH", `/api/requests/${requestId}/complete`, {});
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/hospital/requests"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/hospital/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api", "hospital", "requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api", "hospital", "stats"] });
       toast({ title: "Completed", description: "Donation marked as completed." });
     },
     onError: (error) => {
@@ -558,6 +723,24 @@ function RequestManagement() {
       }
       toast({ title: "Error", description: "Failed to complete request.", variant: "destructive" });
     },
+  });
+
+  const deleteRequestMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      await apiRequest("DELETE", `/api/requests/${requestId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api", "hospital", "requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api", "hospital", "stats"] });
+      toast({ title: "Deleted", description: "Request has been permanently deleted." });
+    },
+    onError: (error) => {
+      if (isUnauthorizedError(error)) {
+        toast({ title: "Unauthorized", description: "Please log in again.", variant: "destructive" });
+        return;
+      }
+      toast({ title: "Error", description: "Failed to delete request.", variant: "destructive" });
+    }
   });
 
   const pendingRequests = allRequests?.filter((r) => r.status === "pending" || r.status === "accepted") || [];
@@ -605,7 +788,7 @@ function RequestManagement() {
                   id="emergency-location"
                   value={newRequest.location}
                   onChange={(e) => setNewRequest({ ...newRequest, location: e.target.value })}
-                  placeholder="Hospital name and address"
+                  placeholder="Hospital location"
                   data-testid="input-emergency-location"
                 />
               </div>
@@ -629,7 +812,7 @@ function RequestManagement() {
                   id="emergency-notes"
                   value={newRequest.notes}
                   onChange={(e) => setNewRequest({ ...newRequest, notes: e.target.value })}
-                  placeholder="Patient details, urgency level, contact information..."
+                  placeholder="Enter any additional information..."
                   data-testid="textarea-emergency-notes"
                 />
               </div>
@@ -666,6 +849,7 @@ function RequestManagement() {
                 request={request}
                 variant="hospital"
                 onComplete={(id) => completeMutation.mutate(id)}
+                onDelete={(id) => deleteRequestMutation.mutate(id)}
               />
             ))}
           </CardContent>
@@ -703,6 +887,7 @@ function RequestManagement() {
                   request={request}
                   variant="hospital"
                   onComplete={(id) => completeMutation.mutate(id)}
+                  onDelete={(id) => deleteRequestMutation.mutate(id)}
                 />
               ))}
             </div>
@@ -713,21 +898,116 @@ function RequestManagement() {
   );
 }
 
+
+function AnnouncementsManagement() {
+  const { toast } = useToast();
+  const [isDataOpen, setIsDataOpen] = useState(false);
+  const [newAnnouncement, setNewAnnouncement] = useState({
+    title: "",
+    message: "",
+    targetBloodGroup: "all" as string,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const data = {
+        ...newAnnouncement,
+        targetBloodGroup: newAnnouncement.targetBloodGroup === "all" ? null : newAnnouncement.targetBloodGroup,
+      };
+      await apiRequest("POST", "/api/announcements", data);
+    },
+    onSuccess: () => {
+      setIsDataOpen(false);
+      setNewAnnouncement({ title: "", message: "", targetBloodGroup: "all" });
+      toast({ title: "Success", description: "Announcement posted successfully." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to post announcement.", variant: "destructive" });
+    },
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <h1 className="text-2xl font-bold">Announcements</h1>
+        <Dialog open={isDataOpen} onOpenChange={setIsDataOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              New Announcement
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create Announcement</DialogTitle>
+              <CardDescription>Post an update for donors.</CardDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="ann-title">Title *</Label>
+                <Input
+                  id="ann-title"
+                  placeholder="Enter title"
+                  value={newAnnouncement.title}
+                  onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ann-target">Target Audience</Label>
+                <Select
+                  value={newAnnouncement.targetBloodGroup}
+                  onValueChange={(val) => setNewAnnouncement({ ...newAnnouncement, targetBloodGroup: val })}
+                >
+                  <SelectTrigger id="ann-target">
+                    <SelectValue placeholder="All Donors" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Donors</SelectItem>
+                    {BLOOD_GROUPS.map((bg) => (
+                      <SelectItem key={bg} value={bg}>{bg} Only</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ann-message">Message *</Label>
+                <Textarea
+                  id="ann-message"
+                  placeholder="Enter details"
+                  className="min-h-[100px]"
+                  value={newAnnouncement.message}
+                  onChange={(e) => setNewAnnouncement({ ...newAnnouncement, message: e.target.value })}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsDataOpen(false)}>Cancel</Button>
+              <Button
+                onClick={() => createMutation.mutate()}
+                disabled={!newAnnouncement.title || !newAnnouncement.message || createMutation.isPending}
+              >
+                {createMutation.isPending ? "Posting..." : "Post Announcement"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Card>
+        <CardContent className="p-12 text-center text-muted-foreground">
+          <Megaphone className="h-12 w-12 mx-auto mb-4 opacity-20" />
+          <p>Only announcements targeting specific groups or global announcements created by you would appear here (if we fetched them).</p>
+          <p className="text-sm mt-2">Currently, this view only allows creation.</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function HospitalDashboard() {
   const { user, isLoading } = useAuth();
   const { toast } = useToast();
   const [activeSection, setActiveSection] = useState("overview");
-
-  useEffect(() => {
-    if (!isLoading && !user) {
-      toast({
-        title: "Unauthorized",
-        description: "Please log in to access the hospital dashboard.",
-        variant: "destructive",
-      });
-      setTimeout(() => { window.location.href = "/api/login"; }, 500);
-    }
-  }, [user, isLoading, toast]);
 
   if (isLoading) {
     return (
@@ -752,6 +1032,7 @@ export default function HospitalDashboard() {
     { id: "users", label: "User Management", icon: Users },
     { id: "inventory", label: "Blood Inventory", icon: Warehouse },
     { id: "requests", label: "Requests", icon: ClipboardList },
+    { id: "announcements", label: "Announcements", icon: Megaphone },
   ];
 
   return (
@@ -794,6 +1075,7 @@ export default function HospitalDashboard() {
             {activeSection === "users" && <UserManagement />}
             {activeSection === "inventory" && <BloodInventory />}
             {activeSection === "requests" && <RequestManagement />}
+            {activeSection === "announcements" && <AnnouncementsManagement />}
           </main>
         </div>
       </div>

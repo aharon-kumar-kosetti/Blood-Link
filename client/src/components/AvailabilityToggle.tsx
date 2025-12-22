@@ -40,7 +40,7 @@ export function AvailabilityToggle({
       ) : (
         <CircleOff className={`${iconSizes[size]} text-muted-foreground`} />
       )}
-      
+
       <div className="flex items-center gap-2">
         <Switch
           id="availability-toggle"
@@ -48,15 +48,14 @@ export function AvailabilityToggle({
           onCheckedChange={onToggle}
           disabled={disabled}
           data-testid="switch-availability"
-          className="data-[state=checked]:bg-green-600"
+          className="data-[state=checked]:bg-green-600 data-[state=checked]:shadow-[0_0_15px_rgba(34,197,94,0.4)] transition-shadow"
         />
         <Label
           htmlFor="availability-toggle"
-          className={`cursor-pointer ${textSizes[size]} ${
-            available 
-              ? "text-green-600 dark:text-green-400 font-medium" 
-              : "text-muted-foreground"
-          }`}
+          className={`cursor-pointer ${textSizes[size]} ${available
+            ? "text-green-600 dark:text-green-400 font-medium"
+            : "text-muted-foreground"
+            }`}
         >
           {available ? "Available to Donate" : "Not Available"}
         </Label>

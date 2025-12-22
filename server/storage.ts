@@ -8,21 +8,27 @@ import {
   type InsertBloodRequest,
   type HospitalBloodStock,
   type BloodGroup,
+  type Announcement,
+  type InsertAnnouncement,
+  announcements,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, desc, sql } from "drizzle-orm";
+import { eq, and, or, desc, sql, getTableColumns } from "drizzle-orm";
 
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
   getUser(id: string): Promise<User | undefined>;
-  upsertUser(user: UpsertUser): Promise<User>;
-  
+  getUserByUsername(username: string): Promise<User | undefined>;
+  createUser(user: any): Promise<User>;
+
   // Extended user operations
   updateUser(id: string, data: Partial<UpsertUser>): Promise<User | undefined>;
   getDonors(filters?: { bloodGroup?: string; location?: string; available?: boolean }): Promise<User[]>;
-  getAllUsers(): Promise<User[]>;
   createUserByHospital(data: Partial<UpsertUser>): Promise<User>;
-  
+  verifyUser(id: string): Promise<User | undefined>;
+  deleteUser(id: string): Promise<User | undefined>;
+  updateUserStatus(id: string, data: { canDonate?: boolean; availabilityStatus?: boolean }): Promise<User | undefined>;
+
   // Blood request operations
   createBloodRequest(data: InsertBloodRequest): Promise<BloodRequest>;
   getBloodRequest(id: string): Promise<BloodRequest | undefined>;
@@ -30,23 +36,32 @@ export interface IStorage {
   getRequestsByUser(userId: string): Promise<BloodRequest[]>;
   getIncomingRequests(userId: string, bloodGroup: BloodGroup): Promise<BloodRequest[]>;
   getCompletedDonations(userId: string): Promise<BloodRequest[]>;
-  getAllRequests(): Promise<BloodRequest[]>;
+  getRequestsByHospital(hospitalId: string): Promise<BloodRequest[]>;
   updateBloodRequest(id: string, data: Partial<BloodRequest>): Promise<BloodRequest | undefined>;
   acceptRequest(requestId: string, donorId: string): Promise<BloodRequest | undefined>;
   completeRequest(requestId: string): Promise<BloodRequest | undefined>;
+  completeRequest(requestId: string): Promise<BloodRequest | undefined>;
   cancelRequest(requestId: string): Promise<BloodRequest | undefined>;
-  
+  deleteBloodRequest(id: string): Promise<BloodRequest | undefined>;
+
   // Hospital blood stock operations
   getHospitalInventory(hospitalId: string): Promise<HospitalBloodStock[]>;
   updateInventory(hospitalId: string, bloodGroup: BloodGroup, delta: number): Promise<HospitalBloodStock>;
   initializeInventory(hospitalId: string): Promise<void>;
-  
+
+  initializeInventory(hospitalId: string): Promise<void>;
+
+  // Announcements
+  createAnnouncement(data: InsertAnnouncement): Promise<Announcement>;
+  getAnnouncements(userBloodGroup?: string, userId?: string): Promise<(Announcement & { creatorName: string })[]>;
+
   // Stats
   getStats(): Promise<{
     totalDonors: number;
     availableDonors: number;
     pendingRequests: number;
     completedDonations: number;
+    totalHospitals: number;
   }>;
 }
 
@@ -57,17 +72,15 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async upsertUser(userData: UpsertUser): Promise<User> {
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async createUser(userData: any): Promise<User> {
     const [user] = await db
       .insert(users)
       .values(userData)
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          ...userData,
-          updatedAt: new Date(),
-        },
-      })
       .returning();
     return user;
   }
@@ -83,29 +96,29 @@ export class DatabaseStorage implements IStorage {
 
   async getDonors(filters?: { bloodGroup?: string; location?: string; available?: boolean }): Promise<User[]> {
     let query = db.select().from(users).where(eq(users.role, "user"));
-    
+
     const conditions: any[] = [eq(users.role, "user"), eq(users.canDonate, true)];
-    
+
     if (filters?.bloodGroup && filters.bloodGroup !== "all") {
       conditions.push(eq(users.bloodGroup, filters.bloodGroup as BloodGroup));
     }
-    
+
     if (filters?.available) {
       conditions.push(eq(users.availabilityStatus, true));
     }
-    
+
     const result = await db
       .select()
       .from(users)
       .where(and(...conditions))
       .orderBy(desc(users.availabilityStatus), desc(users.donationCount));
-    
+
     if (filters?.location) {
-      return result.filter((u) => 
+      return result.filter((u) =>
         u.location?.toLowerCase().includes(filters.location!.toLowerCase())
       );
     }
-    
+
     return result;
   }
 
@@ -120,7 +133,34 @@ export class DatabaseStorage implements IStorage {
         ...data,
         createdByHospital: true,
         role: "user",
+        isVerified: true, // Users created by hospital are verified by default
       } as UpsertUser)
+      .returning();
+    return user;
+  }
+
+  async verifyUser(id: string): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({ isVerified: true, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  async deleteUser(id: string): Promise<User | undefined> {
+    const [user] = await db
+      .delete(users)
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  async updateUserStatus(id: string, data: { canDonate?: boolean; availabilityStatus?: boolean }): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(users.id, id))
       .returning();
     return user;
   }
@@ -147,16 +187,16 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(bloodRequests)
       .where(eq(bloodRequests.id, id));
-    
+
     if (!request) return undefined;
-    
-    const requester = request.requestedById 
-      ? await this.getUser(request.requestedById) 
+
+    const requester = request.requestedById
+      ? await this.getUser(request.requestedById)
       : undefined;
-    const matchedDonor = request.matchedDonorId 
-      ? await this.getUser(request.matchedDonorId) 
+    const matchedDonor = request.matchedDonorId
+      ? await this.getUser(request.matchedDonorId)
       : undefined;
-    
+
     return { ...request, requester, matchedDonor };
   }
 
@@ -166,12 +206,12 @@ export class DatabaseStorage implements IStorage {
       .from(bloodRequests)
       .where(eq(bloodRequests.requestedById, userId))
       .orderBy(desc(bloodRequests.createdAt));
-    
+
     const result = [];
     for (const request of requests) {
       const requester = await this.getUser(request.requestedById);
-      const matchedDonor = request.matchedDonorId 
-        ? await this.getUser(request.matchedDonorId) 
+      const matchedDonor = request.matchedDonorId
+        ? await this.getUser(request.matchedDonorId)
         : undefined;
       result.push({ ...request, requester, matchedDonor });
     }
@@ -189,7 +229,7 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .orderBy(desc(bloodRequests.priority), desc(bloodRequests.createdAt));
-    
+
     const result = [];
     for (const request of requests) {
       if (request.requestedById === userId) continue;
@@ -212,17 +252,18 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(bloodRequests.updatedAt));
   }
 
-  async getAllRequests(): Promise<BloodRequest[]> {
+  async getRequestsByHospital(hospitalId: string): Promise<BloodRequest[]> {
     const requests = await db
       .select()
       .from(bloodRequests)
+      .where(eq(bloodRequests.hospitalId, hospitalId))
       .orderBy(desc(bloodRequests.priority), desc(bloodRequests.createdAt));
-    
+
     const result = [];
     for (const request of requests) {
       const requester = await this.getUser(request.requestedById);
-      const matchedDonor = request.matchedDonorId 
-        ? await this.getUser(request.matchedDonorId) 
+      const matchedDonor = request.matchedDonorId
+        ? await this.getUser(request.matchedDonorId)
         : undefined;
       result.push({ ...request, requester, matchedDonor });
     }
@@ -295,6 +336,14 @@ export class DatabaseStorage implements IStorage {
     return request;
   }
 
+  async deleteBloodRequest(id: string): Promise<BloodRequest | undefined> {
+    const [request] = await db
+      .delete(bloodRequests)
+      .where(eq(bloodRequests.id, id))
+      .returning();
+    return request;
+  }
+
   // Hospital blood stock operations
   async getHospitalInventory(hospitalId: string): Promise<HospitalBloodStock[]> {
     return db
@@ -340,7 +389,7 @@ export class DatabaseStorage implements IStorage {
 
   async initializeInventory(hospitalId: string): Promise<void> {
     const bloodGroups: BloodGroup[] = ["A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-"];
-    
+
     for (const bloodGroup of bloodGroups) {
       const existing = await db
         .select()
@@ -351,7 +400,7 @@ export class DatabaseStorage implements IStorage {
             eq(hospitalBloodStock.bloodGroup, bloodGroup)
           )
         );
-      
+
       if (existing.length === 0) {
         await db.insert(hospitalBloodStock).values({
           hospitalId,
@@ -362,20 +411,77 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  // Announcements
+  async createAnnouncement(data: InsertAnnouncement): Promise<Announcement> {
+    const [announcement] = await db
+      .insert(announcements)
+      .values(data)
+      .returning();
+    return announcement;
+  }
+
+  async getAnnouncements(userBloodGroup?: string, userId?: string): Promise<(Announcement & { creatorName: string })[]> {
+    const conditions = [];
+
+    // Filter by:
+    // 1. Target Blood Group matches user OR is null (global)
+    // 2. targetUserId matches user (specific notification)
+    // 3. (Optional) Filter out notifications meant for others? Yes.
+
+    if (userId) {
+      conditions.push(or(
+        // targeted at this user explicitly
+        eq(announcements.targetUserId, userId),
+        // OR targeted at their blood group (and not a private notification)
+        and(
+          sql`${announcements.targetUserId} IS NULL`,
+          or(
+            sql`${announcements.targetBloodGroup} IS NULL`,
+            eq(announcements.targetBloodGroup, userBloodGroup as BloodGroup)
+          )
+        )
+      ));
+    } else {
+      // Fallback for non-logged in or generic (shouldn't happen for authenticated route)
+      conditions.push(sql`${announcements.targetUserId} IS NULL`);
+      if (userBloodGroup) {
+        conditions.push(or(
+          sql`${announcements.targetBloodGroup} IS NULL`,
+          eq(announcements.targetBloodGroup, userBloodGroup as BloodGroup)
+        ));
+      } else {
+        conditions.push(sql`${announcements.targetBloodGroup} IS NULL`);
+      }
+    }
+
+    const results = await db
+      .select({
+        ...getTableColumns(announcements),
+        creatorName: users.name,
+      })
+      .from(announcements)
+      .leftJoin(users, eq(announcements.createdBy, users.id))
+      .where(and(...conditions))
+      .orderBy(desc(announcements.createdAt));
+
+    return results as (Announcement & { creatorName: string })[];
+  }
+
   // Stats
   async getStats(): Promise<{
     totalDonors: number;
     availableDonors: number;
     pendingRequests: number;
     completedDonations: number;
+    totalHospitals: number;
   }> {
     const allUsers = await db
       .select()
       .from(users)
       .where(and(eq(users.role, "user"), eq(users.canDonate, true)));
-    
+
     const availableUsers = allUsers.filter((u) => u.availabilityStatus);
-    
+
     const pendingReqs = await db
       .select()
       .from(bloodRequests)
@@ -385,17 +491,23 @@ export class DatabaseStorage implements IStorage {
           eq(bloodRequests.status, "accepted")
         )
       );
-    
+
     const completedReqs = await db
       .select()
       .from(bloodRequests)
       .where(eq(bloodRequests.status, "completed"));
+
+    const allHospitals = await db
+      .select()
+      .from(users)
+      .where(eq(users.role, "hospital"));
 
     return {
       totalDonors: allUsers.length,
       availableDonors: availableUsers.length,
       pendingRequests: pendingReqs.length,
       completedDonations: completedReqs.length,
+      totalHospitals: allHospitals.length,
     };
   }
 }

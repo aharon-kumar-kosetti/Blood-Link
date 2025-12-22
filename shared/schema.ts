@@ -39,13 +39,13 @@ export const sessions = pgTable(
 // Users table - supports both donors/receivers and hospitals
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  username: varchar("username").notNull().unique(),
+  password: varchar("password").notNull(),
   email: varchar("email").unique(),
-  firstName: varchar("first_name"),
-  lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   // Blood donation specific fields
-  name: varchar("name").notNull().default(""),
-  age: integer("age"),
+  name: varchar("name").notNull(),
+  age: integer("age").default(18), // Keeping generic age field if needed, or defaulting
   bloodGroup: bloodGroupEnum("blood_group"),
   phone: varchar("phone"),
   location: varchar("location"),
@@ -55,6 +55,8 @@ export const users = pgTable("users", {
   lastDonationDate: timestamp("last_donation_date"),
   createdByHospital: boolean("created_by_hospital").default(false),
   role: userRoleEnum("role").default("user"),
+  isVerified: boolean("is_verified").default(false),
+  idDocumentUrl: varchar("id_document_url"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -63,6 +65,7 @@ export const users = pgTable("users", {
 export const bloodRequests = pgTable("blood_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   requestedById: varchar("requested_by_id").notNull().references(() => users.id),
+  hospitalId: varchar("hospital_id").references(() => users.id), // The hospital selected by the recipient
   bloodGroup: bloodGroupEnum("blood_group").notNull(),
   location: varchar("location").notNull(),
   status: requestStatusEnum("status").default("pending"),
@@ -84,10 +87,24 @@ export const hospitalBloodStock = pgTable("hospital_blood_stock", {
 });
 
 // Relations
+export const announcements = pgTable("announcements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: varchar("title").notNull(),
+  message: varchar("message").notNull(),
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  targetBloodGroup: bloodGroupEnum("target_blood_group"), // Nullable: if null, it's for everyone
+  targetUserId: varchar("target_user_id").references(() => users.id), // For specific user notifications
+  relatedRequestId: varchar("related_request_id").references(() => bloodRequests.id), // To link back to a request
+  type: varchar("type").default("general"), // 'general', 'request_broadcast', 'notification'
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Relations
 export const usersRelations = relations(users, ({ many }) => ({
   requestsMade: many(bloodRequests, { relationName: "requester" }),
   donationsMatched: many(bloodRequests, { relationName: "donor" }),
   bloodStock: many(hospitalBloodStock),
+  announcements: many(announcements, { relationName: "creator" }),
 }));
 
 export const bloodRequestsRelations = relations(bloodRequests, ({ one }) => ({
@@ -110,22 +127,42 @@ export const hospitalBloodStockRelations = relations(hospitalBloodStock, ({ one 
   }),
 }));
 
+export const announcementsRelations = relations(announcements, ({ one }) => ({
+  creator: one(users, {
+    fields: [announcements.createdBy],
+    references: [users.id],
+    relationName: "creator",
+  }),
+}));
+
 // Zod Schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  name: z.string().min(1, "Name is required"),
+  age: z.number().min(18, "Must be at least 18").optional(),
+  bloodGroup: z.string().optional().nullable(),
+  idDocumentUrl: z.string().optional().nullable(),
+});
+
+
+
+export const insertHospitalBloodStockSchema = createInsertSchema(hospitalBloodStock).omit({
+  id: true,
+  lastUpdated: true,
+});
+
+export const insertAnnouncementSchema = createInsertSchema(announcements).omit({
+  id: true,
+  createdAt: true,
 });
 
 export const insertBloodRequestSchema = createInsertSchema(bloodRequests).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
-});
-
-export const insertHospitalBloodStockSchema = createInsertSchema(hospitalBloodStock).omit({
-  id: true,
-  lastUpdated: true,
 });
 
 // Types
@@ -138,6 +175,9 @@ export type InsertBloodRequest = z.infer<typeof insertBloodRequestSchema>;
 
 export type HospitalBloodStock = typeof hospitalBloodStock.$inferSelect;
 export type InsertHospitalBloodStock = z.infer<typeof insertHospitalBloodStockSchema>;
+
+export type Announcement = typeof announcements.$inferSelect;
+export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
 
 // Blood group type for easy reference
 export type BloodGroup = "A+" | "A-" | "B+" | "B-" | "O+" | "O-" | "AB+" | "AB-";

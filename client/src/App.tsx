@@ -4,11 +4,14 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
-import Landing from "@/pages/Landing";
+import LandingBeta from "@/pages/LandingBeta";
 import Home from "@/pages/Home";
 import HospitalDashboard from "@/pages/HospitalDashboard";
 import CompleteProfile from "@/pages/CompleteProfile";
 import NotFound from "@/pages/not-found";
+
+import AuthPage from "@/pages/AuthPage";
+
 
 function Router() {
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -27,20 +30,9 @@ function Router() {
   if (!isAuthenticated) {
     return (
       <Switch>
-        <Route path="/" component={Landing} />
-        <Route component={Landing} />
-      </Switch>
-    );
-  }
-
-  const needsProfileCompletion = !user?.bloodGroup || !user?.name || !user?.location;
-
-  if (needsProfileCompletion && user?.role !== "hospital") {
-    return (
-      <Switch>
-        <Route path="/" component={CompleteProfile} />
-        <Route path="/complete-profile" component={CompleteProfile} />
-        <Route component={CompleteProfile} />
+        <Route path="/" component={LandingBeta} />
+        <Route path="/auth" component={AuthPage} />
+        <Route component={AuthPage} />
       </Switch>
     );
   }
@@ -49,7 +41,9 @@ function Router() {
     return (
       <Switch>
         <Route path="/" component={HospitalDashboard} />
+        <Route path="/landing-beta" component={LandingBeta} />
         <Route path="/hospital" component={HospitalDashboard} />
+        <Route path="/auth" component={AuthPage} />
         <Route component={NotFound} />
       </Switch>
     );
@@ -58,7 +52,9 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
-      <Route path="/hospital" component={HospitalDashboard} />
+      <Route path="/landing-beta" component={LandingBeta} />
+      <Route path="/complete-profile" component={CompleteProfile} />
+      <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
   );
